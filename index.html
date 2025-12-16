@@ -1,254 +1,319 @@
-<script>
- // --- 1. Three.js 场景初始化 ---
- const scene = new THREE.Scene();
- const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
- camera.position.z = 30;
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>WebGL 手势控制爱心粒子</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #000; }
+        #canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; }
+        .input_video { display: none; }
+        #loading {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            color: white; font-family: sans-serif; font-size: 24px; pointer-events: none; z-index: 10;
+        }
+    </style>
+    <!-- 引入 Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- 引入 MediaPipe Hands -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+</head>
+<body>
+    <div id="loading">正在加载模型与摄像头...<br>请允许摄像头权限</div>
+    <div id="canvas-container"></div>
+    <!-- 笔记入口按钮 -->
+    <a href="notes.html" style="position: absolute; top: 20px; right: 20px; z-index: 10; color: #ff69b4; font-size: 18px; text-decoration: none; background: rgba(0,0,0,0.5); padding: 8px 16px; border-radius: 8px;">我的笔记</a>
 
- const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
- renderer.setSize(window.innerWidth, window.innerHeight);
- document.getElementById('canvas-container').appendChild(renderer.domElement);
+    <video class="input_video"></video>
 
- // --- 2. 创建爱心粒子系统 ---
- const particleCount = 3000;
- const geometry = new THREE.BufferGeometry();
- const positions = new Float32Array(particleCount * 3);
- const targetPositions = new Float32Array(particleCount * 3);
- const randomPositions = new Float32Array(particleCount * 3);
+    <script>
+        // --- 1. Three.js 场景初始化 ---
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.z = 30;
 
- // 爱心方程函数（移到粒子系统初始化前）
- function getHeartPosition(t, scale = 1) {
-     const x = 16 * Math.pow(Math.sin(t), 3);
-     const y = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t);
-     const z = 0; 
-     return { x: x * scale, y: y * scale, z: z * scale };
- }
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.getElementById('canvas-container').appendChild(renderer.domElement);
 
- // 填充粒子位置（原代码这部分保留）
- for (let i = 0; i < particleCount; i++) {
-     // ...原代码的粒子位置初始化逻辑
- }
- geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        // --- 2. 爱心粒子系统核心 ---
+        const particleCount = 3000;
+        const geometry = new THREE.BufferGeometry();
+        const positions = new Float32Array(particleCount * 3);
+        const targetPositions = new Float32Array(particleCount * 3); // 爱心目标位置
+        const randomPositions = new Float32Array(particleCount * 3); // 散开随机位置
 
- // 粒子材质（原代码保留）
- const material = new THREE.PointsMaterial({
-     color: 0xff69b4,
-     size: 0.4,
-     transparent: true,
-     opacity: 0.8,
-     blending: THREE.AdditiveBlending
- });
- const particles = new THREE.Points(geometry, material);
- scene.add(particles);
+        // 爱心数学方程
+        function getHeartPosition(t, scale = 1) {
+            const x = 16 * Math.pow(Math.sin(t), 3);
+            const y = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t);
+            const z = 0;
+            return { x: x * scale, y: y * scale, z: z * scale };
+        }
 
- // --- 3. 交互逻辑变量 ---
- let gatherFactor = 0;
- let targetGatherFactor = 0;
+        // 初始化粒子位置（散开+爱心目标）
+        for (let i = 0; i < particleCount; i++) {
+            // 爱心目标位置（带Z轴厚度）
+            const t = Math.random() * Math.PI * 2;
+            const scale = 0.5;
+            const heartPos = getHeartPosition(t, scale);
+            const r = Math.sqrt(Math.random()); // 填充爱心内部
+            targetPositions[i * 3] = heartPos.x * r;
+            targetPositions[i * 3 + 1] = heartPos.y * r;
+            targetPositions[i * 3 + 2] = (Math.random() - 0.5) * 5;
 
- // --- 4. 鼠标点击爱心爆炸特效（移到animate外面）---
- function createClickHeart(x, y) {
-   const clickGeometry = new THREE.BufferGeometry();
-   const clickPositions = new Float32Array(30 * 3);
-   const clickMaterial = new THREE.PointsMaterial({
-     color: 0xff69b4,
-     size: 0.5,
-     transparent: true,
-     opacity: 0.8
-   });
+            // 散开随机位置
+            randomPositions[i * 3] = (Math.random() - 0.5) * 100;
+            randomPositions[i * 3 + 1] = (Math.random() - 0.5) * 60;
+            randomPositions[i * 3 + 2] = (Math.random() - 0.5) * 50;
 
-   for (let i = 0; i < 30; i++) {
-     const t = Math.random() * Math.PI * 2;
-     const r = Math.sqrt(Math.random()) * 2;
-     const heartX = 16 * Math.pow(Math.sin(t), 3) * r;
-     const heartY = (13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t)) * r;
-     clickPositions[i * 3] = x + heartX;
-     clickPositions[i * 3 + 1] = y + heartY;
-     clickPositions[i * 3 + 2] = (Math.random() - 0.5) * 2;
-   }
+            // 初始位置 = 散开状态
+            positions[i * 3] = randomPositions[i * 3];
+            positions[i * 3 + 1] = randomPositions[i * 3 + 1];
+            positions[i * 3 + 2] = randomPositions[i * 3 + 2];
+        }
 
-   clickGeometry.setAttribute('position', new THREE.BufferAttribute(clickPositions, 3));
-   const clickParticles = new THREE.Points(clickGeometry, clickMaterial);
-   scene.add(clickParticles);
+        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
 
-   let opacity = 0.8;
-   function fadeOut() {
-     opacity -= 0.02;
-     clickParticles.material.opacity = opacity;
-     clickParticles.rotation.y += 0.05;
-     if (opacity > 0) {
-       requestAnimationFrame(fadeOut);
-     } else {
-       scene.remove(clickParticles);
-     }
-   }
-   fadeOut();
- }
+        // 粒子材质（热粉色+叠加混合）
+        const material = new THREE.PointsMaterial({
+            color: 0xff69b4,
+            size: 0.4,
+            transparent: true,
+            opacity: 0.8,
+            blending: THREE.AdditiveBlending
+        });
 
- // 鼠标点击事件监听（只绑定一次，移到外面）
- renderer.domElement.addEventListener('click', (e) => {
-   const mouse = new THREE.Vector2(
-     (e.clientX / window.innerWidth) * 2 - 1,
-     -(e.clientY / window.innerHeight) * 2 + 1
-   );
-   const raycaster = new THREE.Raycaster();
-   raycaster.setFromCamera(mouse, camera);
-   const intersects = raycaster.intersectObjects([particles]);
-   if (intersects.length > 0) {
-     const pos = intersects[0].point;
-     createClickHeart(pos.x, pos.y);
-   }
- });
+        const particles = new THREE.Points(geometry, material);
+        scene.add(particles);
 
- // --- 5. 鼠标跟随粒子特效（移到animate外面，且先定义函数再调用）---
-const mouseParticles = [];
-const mouseGeometry = new THREE.BufferGeometry();
-const mousePositions = new Float32Array(50 * 3);
-const mouseMaterial = new THREE.PointsMaterial({
-  color: 0xffc0cb,
-  size: 0.3,
-  transparent: true,
-  opacity: 0.9
-});
+        // --- 3. 手势控制变量 ---
+        let gatherFactor = 0; // 0=散开，1=聚合爱心
+        let targetGatherFactor = 0; // 手势控制的目标值
 
-for (let i = 0; i < 50; i++) {
-  mousePositions[i * 3] = 0;
-  mousePositions[i * 3 + 1] = 0;
-  mousePositions[i * 3 + 2] = 0;
-  mouseParticles.push({ x: 0, y: 0, z: 0, vx: 0, vy: 0 });
-}
+        // --- 4. 鼠标点击爆炸特效 ---
+        function createClickHeart(x, y) {
+            const clickGeometry = new THREE.BufferGeometry();
+            const clickPositions = new Float32Array(30 * 3); // 30个爆炸碎片
+            const clickMaterial = new THREE.PointsMaterial({
+                color: 0xff69b4,
+                size: 0.5,
+                transparent: true,
+                opacity: 0.8
+            });
 
-mouseGeometry.setAttribute('position', new THREE.BufferAttribute(mousePositions, 3));
-const mouseParticleSystem = new THREE.Points(mouseGeometry, mouseMaterial);
-scene.add(mouseParticleSystem);
+            // 生成爱心碎片位置
+            for (let i = 0; i < 30; i++) {
+                const t = Math.random() * Math.PI * 2;
+                const r = Math.sqrt(Math.random()) * 2;
+                const heartX = 16 * Math.pow(Math.sin(t), 3) * r;
+                const heartY = (13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t)) * r;
+                clickPositions[i * 3] = x + heartX;
+                clickPositions[i * 3 + 1] = y + heartY;
+                clickPositions[i * 3 + 2] = (Math.random() - 0.5) * 2;
+            }
 
-let mouse = { x: 0, y: 0 };
-window.addEventListener('mousemove', (e) => {
-  mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
-  mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
-  const vector = new THREE.Vector3(mouse.x, mouse.y, 0.5);
-  vector.unproject(camera);
-  const dir = vector.sub(camera.position).normalize();
-  const distance = -camera.position.z / dir.z;
-  const pos = camera.position.clone().add(dir.multiplyScalar(distance));
-  mouse.x = pos.x;
-  mouse.y = pos.y;
-});
+            clickGeometry.setAttribute('position', new THREE.BufferAttribute(clickPositions, 3));
+            const clickParticles = new THREE.Points(clickGeometry, clickMaterial);
+            scene.add(clickParticles);
 
-// 先定义updateMouseParticles，再在animate里调用
-function updateMouseParticles() {
-  const posAttr = mouseParticleSystem.geometry.attributes.position;
-  const array = posAttr.array;
+            // 碎片淡出动画
+            let opacity = 0.8;
+            function fadeOut() {
+                opacity -= 0.02;
+                clickParticles.material.opacity = opacity;
+                clickParticles.rotation.y += 0.05;
+                if (opacity > 0) {
+                    requestAnimationFrame(fadeOut);
+                } else {
+                    scene.remove(clickParticles);
+                }
+            }
+            fadeOut();
+        }
 
-  mouseParticles.forEach((p, i) => {
-    p.vx += (mouse.x - p.x) * 0.03;
-    p.vy += (mouse.y - p.y) * 0.03;
-    p.vx *= 0.9;
-    p.vy *= 0.9;
-    p.x += p.vx;
-    p.y += p.vy;
-    array[i * 3] = p.x;
-    array[i * 3 + 1] = p.y;
-    array[i * 3 + 2] = p.z + Math.sin(Date.now() * 0.001 + i) * 0.1;
-  });
+        // 绑定鼠标点击事件（只绑定一次）
+        renderer.domElement.addEventListener('click', (e) => {
+            // 转换鼠标坐标到3D场景
+            const mouse = new THREE.Vector2(
+                (e.clientX / window.innerWidth) * 2 - 1,
+                -(e.clientY / window.innerHeight) * 2 + 1
+            );
+            const raycaster = new THREE.Raycaster();
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects([particles]);
+            if (intersects.length > 0) {
+                const pos = intersects[0].point;
+                createClickHeart(pos.x, pos.y);
+            }
+        });
 
-  posAttr.needsUpdate = true;
-}
+        // --- 5. 鼠标跟随粒子特效 ---
+        const mouseParticles = [];
+        const mouseGeometry = new THREE.BufferGeometry();
+        const mousePositions = new Float32Array(50 * 3); // 50个跟随粒子
+        const mouseMaterial = new THREE.PointsMaterial({
+            color: 0xffc0cb, // 浅粉色
+            size: 0.3,
+            transparent: true,
+            opacity: 0.9
+        });
 
- // --- 6. MediaPipe Hands 配置（保留原逻辑，确认Camera使用）---
- const videoElement = document.getElementsByClassName('input_video')[0];
+        // 初始化跟随粒子位置
+        for (let i = 0; i < 50; i++) {
+            mousePositions[i * 3] = 0;
+            mousePositions[i * 3 + 1] = 0;
+            mousePositions[i * 3 + 2] = 0;
+            mouseParticles.push({ x: 0, y: 0, z: 0, vx: 0, vy: 0 });
+        }
 
- function onResults(results) {
-     document.getElementById('loading').style.display = 'none';
+        mouseGeometry.setAttribute('position', new THREE.BufferAttribute(mousePositions, 3));
+        const mouseParticleSystem = new THREE.Points(mouseGeometry, mouseMaterial);
+        scene.add(mouseParticleSystem);
 
-     if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-         const landmarks = results.multiHandLandmarks[0];
-         const wrist = landmarks[0];
-         const fingerTips = [4, 8, 12, 16, 20];
-         let totalDist = 0;
+        // 鼠标位置转换（屏幕坐标 -> 3D场景坐标）
+        let mouse = { x: 0, y: 0 };
+        window.addEventListener('mousemove', (e) => {
+            mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+            const vector = new THREE.Vector3(mouse.x, mouse.y, 0.5);
+            vector.unproject(camera);
+            const dir = vector.sub(camera.position).normalize();
+            const distance = -camera.position.z / dir.z;
+            const pos = camera.position.clone().add(dir.multiplyScalar(distance));
+            mouse.x = pos.x;
+            mouse.y = pos.y;
+        });
 
-         fingerTips.forEach(idx => {
-             const tip = landmarks[idx];
-             const dist = Math.sqrt(
-                 Math.pow(tip.x - wrist.x, 2) + 
-                 Math.pow(tip.y - wrist.y, 2)
-             );
-             totalDist += dist;
-         });
+        // 更新跟随粒子位置
+        function updateMouseParticles() {
+            const posAttr = mouseParticleSystem.geometry.attributes.position;
+            const array = posAttr.array;
 
-         const avgDist = totalDist / 5;
-         const closeThreshold = 0.25; 
-         const openThreshold = 0.5;
+            mouseParticles.forEach((p, i) => {
+                // 向鼠标位置靠近
+                p.vx += (mouse.x - p.x) * 0.03;
+                p.vy += (mouse.y - p.y) * 0.03;
+                // 减速阻尼
+                p.vx *= 0.9;
+                p.vy *= 0.9;
+                // 更新位置
+                p.x += p.vx;
+                p.y += p.vy;
+                // Z轴微小浮动
+                array[i * 3] = p.x;
+                array[i * 3 + 1] = p.y;
+                array[i * 3 + 2] = p.z + Math.sin(Date.now() * 0.001 + i) * 0.1;
+            });
 
-         let normalized = (avgDist - closeThreshold) / (openThreshold - closeThreshold);
-         normalized = 1 - Math.min(Math.max(normalized, 0), 1);
-         targetGatherFactor = normalized; 
+            posAttr.needsUpdate = true;
+        }
 
-     } else {
-         targetGatherFactor = 0;
-     }
- }
+        // --- 6. MediaPipe 手势识别配置 ---
+        const videoElement = document.getElementsByClassName('input_video')[0];
 
- const hands = new Hands({locateFile: (file) => {
-     return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
- }});
+        // 手势识别回调
+        function onResults(results) {
+            document.getElementById('loading').style.display = 'none';
 
- hands.setOptions({
-     maxNumHands: 1,
-     modelComplexity: 1,
-     minDetectionConfidence: 0.5,
-     minTrackingConfidence: 0.5
- });
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                const landmarks = results.multiHandLandmarks[0];
+                const wrist = landmarks[0]; // 手腕关键点
+                const fingerTips = [4, 8, 12, 16, 20]; // 五指指尖关键点
 
- hands.onResults(onResults);
+                // 计算指尖到手腕的平均距离（判断开合程度）
+                let totalDist = 0;
+                fingerTips.forEach(idx => {
+                    const tip = landmarks[idx];
+                    const dist = Math.sqrt(
+                        Math.pow(tip.x - wrist.x, 2) +
+                        Math.pow(tip.y - wrist.y, 2)
+                    );
+                    totalDist += dist;
+                });
 
- const cameraUtils = new Camera(videoElement, {
-     onFrame: async () => {
-         await hands.send({image: videoElement});
-     },
-     width: 640,
-     height: 480
- });
- cameraUtils.start();
+                const avgDist = totalDist / 5;
+                const closeThreshold = 0.25; // 握拳阈值
+                const openThreshold = 0.5;   // 张开阈值
 
- // --- 7. 动画循环（只保留动画逻辑，不再嵌套函数/事件）---
- function animate() {
-     requestAnimationFrame(animate);
+                // 映射：握拳（距离小）-> 聚合（1），张开（距离大）-> 散开（0）
+                let normalized = (avgDist - closeThreshold) / (openThreshold - closeThreshold);
+                normalized = 1 - Math.min(Math.max(normalized, 0), 1);
+                targetGatherFactor = normalized;
+            } else {
+                // 未检测到手 -> 缓慢散开
+                targetGatherFactor = 0;
+            }
+        }
 
-     // 粒子旋转
-     particles.rotation.y += 0.002;
+        // 初始化MediaPipe Hands
+        const hands = new Hands({ locateFile: (file) => {
+            return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+        }});
 
-     // 平滑聚合系数
-     gatherFactor += (targetGatherFactor - gatherFactor) * 0.05;
+        hands.setOptions({
+            maxNumHands: 1,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.5,
+            minTrackingConfidence: 0.5
+        });
 
-     // 更新爱心粒子位置
-     const posAttr = particles.geometry.attributes.position;
-     const currentPositions = posAttr.array;
+        hands.onResults(onResults);
 
-     for (let i = 0; i < particleCount; i++) {
-         const idx = i * 3;
-         const tx = randomPositions[idx] + (targetPositions[idx] - randomPositions[idx]) * gatherFactor;
-         const ty = randomPositions[idx+1] + (targetPositions[idx+1] - randomPositions[idx+1]) * gatherFactor;
-         const tz = randomPositions[idx+2] + (targetPositions[idx+2] - randomPositions[idx+2]) * gatherFactor;
+        // 启动摄像头
+        const cameraUtils = new Camera(videoElement, {
+            onFrame: async () => {
+                await hands.send({ image: videoElement });
+            },
+            width: 640,
+            height: 480
+        });
+        cameraUtils.start();
 
-         currentPositions[idx] += (tx - currentPositions[idx]) * 0.1;
-         currentPositions[idx+1] += (ty - currentPositions[idx+1]) * 0.1;
-         currentPositions[idx+2] += (tz - currentPositions[idx+2]) * 0.1;
-     }
-     posAttr.needsUpdate = true;
+        // --- 7. 动画循环（核心渲染逻辑）---
+        function animate() {
+            requestAnimationFrame(animate);
 
-     // 更新鼠标跟随粒子
-     updateMouseParticles();
+            // 爱心粒子旋转
+            particles.rotation.y += 0.002;
 
-     // 渲染场景
-     renderer.render(scene, camera);
- }
+            // 平滑过渡聚合系数（避免突变）
+            gatherFactor += (targetGatherFactor - gatherFactor) * 0.05;
 
- // 启动动画
- animate();
+            // 更新爱心粒子位置（插值过渡）
+            const posAttr = particles.geometry.attributes.position;
+            const currentPositions = posAttr.array;
+            for (let i = 0; i < particleCount; i++) {
+                const idx = i * 3;
+                const tx = randomPositions[idx] + (targetPositions[idx] - randomPositions[idx]) * gatherFactor;
+                const ty = randomPositions[idx+1] + (targetPositions[idx+1] - randomPositions[idx+1]) * gatherFactor;
+                const tz = randomPositions[idx+2] + (targetPositions[idx+2] - randomPositions[idx+2]) * gatherFactor;
 
- // --- 8. 窗口适配（保留原逻辑）---
- window.addEventListener('resize', () => {
-     camera.aspect = window.innerWidth / window.innerHeight;
-     camera.updateProjectionMatrix();
-     renderer.setSize(window.innerWidth, window.innerHeight);
- });
-</script>
+                // 平滑移动到目标位置
+                currentPositions[idx] += (tx - currentPositions[idx]) * 0.1;
+                currentPositions[idx+1] += (ty - currentPositions[idx+1]) * 0.1;
+                currentPositions[idx+2] += (tz - currentPositions[idx+2]) * 0.1;
+            }
+            posAttr.needsUpdate = true;
+
+            // 更新鼠标跟随粒子
+            updateMouseParticles();
+
+            // 渲染场景
+            renderer.render(scene, camera);
+        }
+
+        // 启动动画
+        animate();
+
+        // --- 8. 窗口大小适配 ---
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
