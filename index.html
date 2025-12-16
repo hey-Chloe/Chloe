@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+ <meta charset="UTF-8">
+ <title>WebGL 手势控制爱心粒子</title>
+ <style>
+     body { margin: 0; overflow: hidden; background-color: #000; }
+     #canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; }
+     /* 隐藏摄像头视频流，只用于后台分析 */
+     .input_video { display: none; }
+     #loading {
+         position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+         color: white; font-family: sans-serif; font-size: 24px; pointer-events: none; z-index: 10;
+     }
+ </style>
+ <!-- 引入 Three.js -->
+ <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+ <!-- 引入 MediaPipe Hands -->
+ <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+ <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+ <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+ <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+</head>
+<body>
+
+<div id="loading">正在加载模型与摄像头...<br>请允许摄像头权限</div>
+<div id="canvas-container"></div>
+<video class="input_video"></video>
+
+<script>
+ // --- 1. Three.js 场景初始化 ---
+ const scene = new THREE.Scene();
+ const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+ camera.position.z = 30;
+
+ const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+ renderer.setSize(window.innerWidth, window.innerHeight);
+ document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+ // --- 2. 创建爱心粒子系统 ---
+ const particleCount = 3000; // 粒子数量
+ const geometry = new THREE.BufferGeometry();
+ const positions = new Float32Array(particleCount * 3);
+ const targetPositions = new Float32Array(particleCount * 3); // 存储爱心形状的目标位置
+ const randomPositions = new Float32Array(particleCount * 3); // 存储散开时的随机位置
+
+ // 爱心方程函数
+ function getHeartPosition(t, scale = 1) {
+     const x = 16 * Math.pow(Math.sin(t), 3);
+     const y = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t);
+     const z = 0; 
+     return { x: x * scale, y: y * scale, z: z * scale };
+ }
+
+ for (let i = 0; i < particleCount; i++) {
+     // 生成爱心形状的目标点
+     // 为了让爱心立体一点，我们随机分布t，并在Z轴加一点随机扰动
+     const t = Math.random() * Math.PI * 2;
+     const scale = 0.5; 
+     const heartPos = getHeartPosition(t, scale);
+     
+     // 填充爱心内部 (随机缩放)
+     const r = Math.sqrt(Math.random()); 
+     
+     targetPositions[i * 3] = heartPos.x * r;
+     targetPositions[i * 3 + 1] = heartPos.y * r;
+     targetPositions[i * 3 + 2] = (Math.random() - 0.5) * 5; // Z轴厚度
+
+     // 生成散开的随机位置 (爆炸效果)
+     randomPositions[i * 3] = (Math.random() - 0.5) * 100;
+     randomPositions[i * 3 + 1] = (Math.random() - 0.5) * 60;
+     randomPositions[i * 3 + 2] = (Math.random() - 0.5) * 50;
+
+     // 初始位置设为散开状态
+     positions[i * 3] = randomPositions[i * 3];
+     positions[i * 3 + 1] = randomPositions[i * 3 + 1];
+     positions[i * 3 + 2] = randomPositions[i * 3 + 2];
+ }
+
+ geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+ // 粒子材质
+ const material = new THREE.PointsMaterial({
+     color: 0xff69b4, // 热粉色
+     size: 0.4,
+     transparent: true,
+     opacity: 0.8,
+     blending: THREE.AdditiveBlending
+ });
+
+ const particles = new THREE.Points(geometry, material);
+ scene.add(particles);
+
+ // --- 3. 交互逻辑变量 ---
+ let gatherFactor = 0; // 0 = 完全散开, 1 = 完全聚合成爱心
+ let targetGatherFactor = 0; // 目标聚合度，由手势控制
+
+ // --- 4. MediaPipe Hands 配置 ---
+ const videoElement = document.getElementsByClassName('input_video')[0];
+
+ function onResults(results) {
+     document.getElementById('loading').style.display = 'none';
+
+     if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+         const landmarks = results.multiHandLandmarks[0];
+
+         // 计算手掌开合程度
+         // 简单算法：计算拇指指尖(4)与其他四指指尖(8,12,16,20)到手腕(0)的平均距离
+         const wrist = landmarks[0];
+         const fingerTips = [4, 8, 12, 16, 20];
+         let totalDist = 0;
+
+         fingerTips.forEach(idx => {
+             const tip = landmarks[idx];
+             const dist = Math.sqrt(
+                 Math.pow(tip.x - wrist.x, 2) + 
+                 Math.pow(tip.y - wrist.y, 2)
+             );
+             totalDist += dist;
+         });
+
+         const avgDist = totalDist / 5;
+
+         // 经验阈值：
+         // 握拳时，指尖距离手腕很近 (avgDist 约 0.1 - 0.2)
+         // 张开时，指尖距离手腕较远 (avgDist 约 0.4 - 0.6)
+         // 我们做一个映射：握拳(distance small) -> 聚合(factor 1), 张开 -> 散开(factor 0)
+         
+         // 动态调整这些阈值以适应摄像头的距离
+         const closeThreshold = 0.25; 
+         const openThreshold = 0.5;
+
+         let normalized = (avgDist - closeThreshold) / (openThreshold - closeThreshold);
+         normalized = 1 - Math.min(Math.max(normalized, 0), 1); // 反转：距离越小(握拳)，值越大(1)
+
+         targetGatherFactor = normalized; 
+
+     } else {
+         // 如果没有检测到手，默认缓慢散开
+         targetGatherFactor = 0;
+     }
+ }
+
+ const hands = new Hands({locateFile: (file) => {
+     return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+ }});
+
+ hands.setOptions({
+     maxNumHands: 1,
+     modelComplexity: 1,
+     minDetectionConfidence: 0.5,
+     minTrackingConfidence: 0.5
+ });
+
+ hands.onResults(onResults);
+
+ const cameraUtils = new Camera(videoElement, {
+     onFrame: async () => {
+         await hands.send({image: videoElement});
+     },
+     width: 640,
+     height: 480
+ });
+ cameraUtils.start();
+
+ // --- 5. 动画循环 ---
+ function animate() {
+     requestAnimationFrame(animate);
+
+     // 粒子自身旋转动画
+     particles.rotation.y += 0.002;
+
+     // 平滑过渡聚合系数 (Lerp)
+     gatherFactor += (targetGatherFactor - gatherFactor) * 0.05;
+
+     // 更新粒子位置
+     const posAttr = particles.geometry.attributes.position;
+     const currentPositions = posAttr.array;
+
+     for (let i = 0; i < particleCount; i++) {
+         const idx = i * 3;
+         
+         // 目标位置插值：从 randomPositions 过渡到 targetPositions
+         const tx = randomPositions[idx] + (targetPositions[idx] - randomPositions[idx]) * gatherFactor;
+         const ty = randomPositions[idx+1] + (targetPositions[idx+1] - randomPositions[idx+1]) * gatherFactor;
+         const tz = randomPositions[idx+2] + (targetPositions[idx+2] - randomPositions[idx+2]) * gatherFactor;
+
+         // 增加一点动态浮动效果
+         currentPositions[idx] += (tx - currentPositions[idx]) * 0.1;
+         currentPositions[idx+1] += (ty - currentPositions[idx+1]) * 0.1;
+         currentPositions[idx+2] += (tz - currentPositions[idx+2]) * 0.1;
+     }
+
+     posAttr.needsUpdate = true;
+     renderer.render(scene, camera);
+ }
+
+ animate();
+
+ // 窗口大小调整适配
+ window.addEventListener('resize', () => {
+     camera.aspect = window.innerWidth / window.innerHeight;
+     camera.updateProjectionMatrix();
+     renderer.setSize(window.innerWidth, window.innerHeight);
+ });
+</script>
+</body>
+</html>
+
