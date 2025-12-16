@@ -25,6 +25,9 @@
 
 <div id="loading">正在加载模型与摄像头...<br>请允许摄像头权限</div>
 <div id="canvas-container"></div>
+ <!-- 笔记入口按钮 -->
+<a href="notes.html" style="position: absolute; top: 20px; right: 20px; z-index: 10; color: #ff69b4; font-size: 18px; text-decoration: none; background: rgba(0,0,0,0.5); padding: 8px 16px; border-radius: 8px;">我的笔记</a>
+
 <video class="input_video"></video>
 
 <script>
@@ -190,12 +193,133 @@
          currentPositions[idx+1] += (ty - currentPositions[idx+1]) * 0.1;
          currentPositions[idx+2] += (tz - currentPositions[idx+2]) * 0.1;
      }
+// --- 鼠标点击爱心爆炸特效 ---
+function createClickHeart(x, y) {
+  const clickGeometry = new THREE.BufferGeometry();
+  const clickPositions = new Float32Array(30 * 3); // 30个碎片
+  const clickMaterial = new THREE.PointsMaterial({
+    color: 0xff69b4,
+    size: 0.5,
+    transparent: true,
+    opacity: 0.8
+  });
 
+  // 生成爱心碎片位置
+  for (let i = 0; i < 30; i++) {
+    const t = Math.random() * Math.PI * 2;
+    const r = Math.sqrt(Math.random()) * 2;
+    const heartX = 16 * Math.pow(Math.sin(t), 3) * r;
+    const heartY = (13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t)) * r;
+    clickPositions[i * 3] = x + heartX;
+    clickPositions[i * 3 + 1] = y + heartY;
+    clickPositions[i * 3 + 2] = (Math.random() - 0.5) * 2;
+  }
+
+  clickGeometry.setAttribute('position', new THREE.BufferAttribute(clickPositions, 3));
+  const clickParticles = new THREE.Points(clickGeometry, clickMaterial);
+  scene.add(clickParticles);
+
+  // 碎片消失动画
+  let opacity = 0.8;
+  function fadeOut() {
+    opacity -= 0.02;
+    clickParticles.material.opacity = opacity;
+    clickParticles.rotation.y += 0.05;
+    if (opacity > 0) {
+      requestAnimationFrame(fadeOut);
+    } else {
+      scene.remove(clickParticles);
+    }
+  }
+  fadeOut();
+}
+
+// 监听鼠标点击事件
+renderer.domElement.addEventListener('click', (e) => {
+  // 转换点击位置到3D场景坐标
+  const mouse = new THREE.Vector2(
+    (e.clientX / window.innerWidth) * 2 - 1,
+    -(e.clientY / window.innerHeight) * 2 + 1
+  );
+  const raycaster = new THREE.Raycaster();
+  raycaster.setFromCamera(mouse, camera);
+  const intersects = raycaster.intersectObjects([particles]);
+  if (intersects.length > 0) {
+    const pos = intersects[0].point;
+    createClickHeart(pos.x, pos.y);
+  }
+});
      posAttr.needsUpdate = true;
+     updateMouseParticles();
      renderer.render(scene, camera);
  }
 
  animate();
+ // --- 鼠标跟随粒子特效 ---
+const mouseParticles = [];
+const mouseGeometry = new THREE.BufferGeometry();
+const mousePositions = new Float32Array(50 * 3); // 50个跟随粒子
+const mouseMaterial = new THREE.PointsMaterial({
+  color: 0xffc0cb, // 浅粉色
+  size: 0.3,
+  transparent: true,
+  opacity: 0.9
+});
+
+for (let i = 0; i < 50; i++) {
+  mousePositions[i * 3] = 0;
+  mousePositions[i * 3 + 1] = 0;
+  mousePositions[i * 3 + 2] = 0;
+  mouseParticles.push({ x: 0, y: 0, z: 0, vx: 0, vy: 0 });
+}
+
+mouseGeometry.setAttribute('position', new THREE.BufferAttribute(mousePositions, 3));
+const mouseParticleSystem = new THREE.Points(mouseGeometry, mouseMaterial);
+scene.add(mouseParticleSystem);
+
+// 监听鼠标移动
+let mouse = { x: 0, y: 0 };
+window.addEventListener('mousemove', (e) => {
+  // 把鼠标坐标转换成3D场景坐标
+  mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+  mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+  const vector = new THREE.Vector3(mouse.x, mouse.y, 0.5);
+  vector.unproject(camera);
+  const dir = vector.sub(camera.position).normalize();
+  const distance = -camera.position.z / dir.z;
+  const pos = camera.position.clone().add(dir.multiplyScalar(distance));
+  mouse.x = pos.x;
+  mouse.y = pos.y;
+});
+
+// 在动画循环里更新跟随粒子
+function updateMouseParticles() {
+  const posAttr = mouseParticleSystem.geometry.attributes.position;
+  const array = posAttr.array;
+
+  mouseParticles.forEach((p, i) => {
+    // 粒子向鼠标位置靠近
+    p.vx += (mouse.x - p.x) * 0.03;
+    p.vy += (mouse.y - p.y) * 0.03;
+    // 粒子减速
+    p.vx *= 0.9;
+    p.vy *= 0.9;
+    // 更新位置
+    p.x += p.vx;
+    p.y += p.vy;
+    // 赋值到几何体
+    array[i * 3] = p.x;
+    array[i * 3 + 1] = p.y;
+    array[i * 3 + 2] = p.z + Math.sin(Date.now() * 0.001 + i) * 0.1;
+  });
+
+  posAttr.needsUpdate = true;
+}
+
+// 记得在 animate() 函数里调用 updateMouseParticles()
+// 找到 animate() 里的 renderer.render 前面，加一行：
+// updateMouseParticles();
+ 
 
  // 窗口大小调整适配
  window.addEventListener('resize', () => {
