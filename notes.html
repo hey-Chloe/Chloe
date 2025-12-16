@@ -1,332 +1,64 @@
-<!DOCTYPE html>
-<html lang="zh">
+<!-- 先在notes.html的<head>里引入markdown渲染库（之前没加的话补上） -->
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>我的笔记本</title>
-    <style>
-        /* 保持和粒子页一致的黑色+粉色风格 */
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: "Microsoft YaHei", sans-serif;
-        }
-
-        body {
-            background-color: #000;
-            color: #fff;
-            padding: 2rem;
-            min-height: 100vh;
-        }
-
-        /* 页面容器（居中显示） */
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-        }
-
-        /* 标题样式 */
-        .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 2rem;
-            border-bottom: 2px solid #ff69b4;
-            padding-bottom: 1rem;
-        }
-
-        .header h1 {
-            color: #ff69b4;
-            font-size: 2rem;
-        }
-
-        /* 跳转按钮（返回粒子页） */
-        .back-btn {
-            color: #ff69b4;
-            background: rgba(255, 105, 180, 0.1);
-            border: 1px solid #ff69b4;
-            padding: 0.6rem 1.2rem;
-            border-radius: 8px;
-            text-decoration: none;
-            font-size: 1rem;
-            transition: all 0.3s ease;
-        }
-
-        .back-btn:hover {
-            background: #ff69b4;
-            color: #000;
-        }
-
-        /* 添加笔记区域 */
-        .add-note {
-            background: rgba(255, 255, 255, 0.05);
-            padding: 1.5rem;
-            border-radius: 12px;
-            margin-bottom: 2rem;
-            border: 1px solid #ff69b433;
-        }
-
-        .add-note h3 {
-            color: #ffc0cb;
-            margin-bottom: 1rem;
-            font-size: 1.2rem;
-        }
-
-        #note-title {
-            width: 100%;
-            padding: 0.8rem;
-            margin-bottom: 1rem;
-            background: rgba(255, 255, 255, 0.1);
-            border: 1px solid #ff69b4;
-            border-radius: 8px;
-            color: #fff;
-            font-size: 1rem;
-        }
-
-        #note-content {
-            width: 100%;
-            padding: 0.8rem;
-            margin-bottom: 1rem;
-            background: rgba(255, 255, 255, 0.1);
-            border: 1px solid #ff69b4;
-            border-radius: 8px;
-            color: #fff;
-            font-size: 1rem;
-            min-height: 120px;
-            resize: vertical;
-        }
-
-        #add-btn {
-            background: #ff69b4;
-            color: #000;
-            border: none;
-            padding: 0.8rem 1.5rem;
-            border-radius: 8px;
-            font-size: 1rem;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-
-        #add-btn:hover {
-            background: #ff4da6;
-            transform: scale(1.02);
-        }
-
-        /* 笔记列表区域 */
-        .notes-list h3 {
-            color: #ffc0cb;
-            margin-bottom: 1rem;
-            font-size: 1.2rem;
-        }
-
-        .note-item {
-            background: rgba(255, 255, 255, 0.05);
-            padding: 1.5rem;
-            border-radius: 12px;
-            margin-bottom: 1rem;
-            border-left: 4px solid #ff69b4;
-            transition: all 0.3s ease;
-        }
-
-        .note-item:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 5px 15px rgba(255, 105, 180, 0.1);
-        }
-
-        .note-item h4 {
-            color: #ff69b4;
-            margin-bottom: 0.5rem;
-            font-size: 1.1rem;
-        }
-
-        .note-time {
-            color: #999;
-            font-size: 0.8rem;
-            margin-bottom: 1rem;
-            display: block;
-        }
-
-        .note-content {
-            color: #eee;
-            line-height: 1.6;
-            margin-bottom: 1rem;
-        }
-
-        .note-actions {
-            display: flex;
-            gap: 1rem;
-        }
-
-        .delete-btn {
-            background: rgba(255, 59, 48, 0.2);
-            color: #ff6b6b;
-            border: 1px solid #ff6b6b;
-            padding: 0.4rem 0.8rem;
-            border-radius: 6px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-
-        .delete-btn:hover {
-            background: #ff6b6b;
-            color: #000;
-        }
-
-        /* 空笔记提示 */
-        .empty-tip {
-            color: #666;
-            text-align: center;
-            padding: 2rem;
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 12px;
-        }
-    </style>
+  <!-- 其他样式代码... -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
-<body>
-    <div class="container">
-        <!-- 头部：标题 + 返回按钮 -->
-        <div class="header">
-            <h1>我的笔记本</h1>
-            <a href="index.html" class="back-btn">返回粒子特效页</a>
-        </div>
 
-        <!-- 添加笔记区域 -->
-        <div class="add-note">
-            <h3>添加新笔记</h3>
-            <input type="text" id="note-title" placeholder="请输入笔记标题...">
-            <textarea id="note-content" placeholder="请输入笔记内容..."></textarea>
-            <button id="add-btn">保存笔记</button>
-        </div>
-
-        <!-- 笔记列表区域 -->
-        <div class="notes-list">
-            <h3>我的笔记</h3>
-            <div id="notes-container">
-                <!-- 笔记会通过JS动态渲染到这里 -->
-                <div class="empty-tip">暂无笔记，点击上方添加第一条笔记吧～</div>
-            </div>
-        </div>
+<!-- 然后在notes.html的“笔记列表区域”添加这篇笔记的入口 -->
+<div class="notes-list">
+  <h3>我的笔记</h3>
+  <div id="notes-container">
+    <!-- 新增这篇RCE笔记的条目 -->
+    <div class="note-item">
+      <h4>关于RCE、命令注入的三道题</h4>
+      <span class="note-time">2025-12-17 （你创建的时间）</span>
+      <!-- 用哈希传递MD文件名，避免跳转到新页面 -->
+      <a href="#关于RCE、命令注入的三道题.md" class="note-link" style="color: #ff69b4; text-decoration: underline;">点击查看笔记内容</a>
     </div>
 
-    <script>
-        // 核心功能：用localStorage存储笔记（浏览器本地存储，刷新不丢失）
-        const notesContainer = document.getElementById('notes-container');
-        const noteTitleInput = document.getElementById('note-title');
-        const noteContentInput = document.getElementById('note-content');
-        const addBtn = document.getElementById('add-btn');
+    <!-- 其他笔记条目... -->
+  </div>
 
-        // 1. 加载本地存储的笔记
-        function loadNotes() {
-            const notes = JSON.parse(localStorage.getItem('myNotes') || '[]');
-            renderNotes(notes);
-        }
+  <!-- 新增：MD笔记内容渲染容器（点击链接后显示） -->
+  <div id="md-content-container" style="margin-top: 2rem; padding: 2rem; background: rgba(255,255,255,0.05); border-radius: 12px; display: none;">
+    <h3 id="md-title" style="color: #ff69b4; margin-bottom: 1rem;"></h3>
+    <div id="md-content" style="color: #eee; line-height: 1.8;"></div>
+    <button id="hide-md-btn" style="margin-top: 1.5rem; background: #ff69b4; color: #000; border: none; padding: 0.8rem 1.5rem; border-radius: 8px; cursor: pointer;">关闭笔记</button>
+  </div>
+</div>
 
-        // 2. 渲染笔记到页面
-        function renderNotes(notes) {
-            if (notes.length === 0) {
-                notesContainer.innerHTML = '<div class="empty-tip">暂无笔记，点击上方添加第一条笔记吧～</div>';
-                return;
-            }
+<!-- 最后在notes.html的<script>里添加渲染MD的逻辑 -->
+<script>
+  // 之前的笔记代码...
 
-            // 按时间倒序排列（最新的笔记在前面）
-            notes.sort((a, b) => new Date(b.time) - new Date(a.time));
+  // 新增：处理MD笔记的显示/渲染
+  document.querySelectorAll('.note-link').forEach(link => {
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      const mdFileName = e.target.getAttribute('href').slice(1); // 获取MD文件名（去掉#）
+      const mdTitle = e.target.closest('.note-item').querySelector('h4').textContent; // 获取笔记标题
 
-            let html = '';
-            notes.forEach((note, index) => {
-                html += `
-                    <div class="note-item">
-                        <h4>${note.title || '无标题笔记'}</h4>
-                        <span class="note-time">${formatTime(note.time)}</span>
-                        <div class="note-content">${note.content || '无内容'}</div>
-                        <div class="note-actions">
-                            <button class="delete-btn" data-index="${index}">删除笔记</button>
-                        </div>
-                    </div>
-                `;
-            });
-            notesContainer.innerHTML = html;
+      // 显示MD容器，设置标题
+      document.getElementById('md-content-container').style.display = 'block';
+      document.getElementById('md-title').textContent = mdTitle;
 
-            // 给删除按钮绑定事件
-            document.querySelectorAll('.delete-btn').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    const index = e.target.dataset.index;
-                    deleteNote(index);
-                });
-            });
-        }
-
-        // 3. 添加新笔记
-        function addNote() {
-            const title = noteTitleInput.value.trim();
-            const content = noteContentInput.value.trim();
-
-            if (!title && !content) {
-                alert('标题和内容不能都为空哦～');
-                return;
-            }
-
-            const notes = JSON.parse(localStorage.getItem('myNotes') || '[]');
-            notes.push({
-                title: title,
-                content: content,
-                time: new Date().toISOString() // 记录当前时间
-            });
-
-            // 保存到localStorage
-            localStorage.setItem('myNotes', JSON.stringify(notes));
-            // 重新渲染笔记
-            renderNotes(notes);
-            // 清空输入框
-            noteTitleInput.value = '';
-            noteContentInput.value = '';
-        }
-
-        // 4. 删除笔记
-        function deleteNote(index) {
-            if (!confirm('确定要删除这条笔记吗？删除后无法恢复～')) {
-                return;
-            }
-
-            const notes = JSON.parse(localStorage.getItem('myNotes') || '[]');
-            notes.splice(index, 1); // 删除对应索引的笔记
-            localStorage.setItem('myNotes', JSON.stringify(notes));
-            renderNotes(notes);
-        }
-
-        // 辅助函数：格式化时间（比如 2025-12-17 15:30:20）
-        function formatTime(timeStr) {
-            const date = new Date(timeStr);
-            return date.toLocaleString('zh-CN', {
-                year: 'numeric',
-                month: '2-digit',
-                day: '2-digit',
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit'
-            });
-        }
-
-        // 绑定事件：点击保存按钮添加笔记
-        addBtn.addEventListener('click', addNote);
-
-        // 绑定事件：按Enter键快速保存（标题框按Enter聚焦内容框，内容框按Enter保存）
-        noteTitleInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                noteContentInput.focus();
-            }
+      // 加载并渲染MD文件
+      fetch(mdFileName)
+        .then(res => {
+          if (!res.ok) throw new Error('笔记文件未找到');
+          return res.text();
+        })
+        .then(mdContent => {
+          document.getElementById('md-content').innerHTML = marked.parse(mdContent); // 渲染MD为HTML
+        })
+        .catch(err => {
+          document.getElementById('md-content').innerHTML = `<p style="color: #ff6b6b;">${err.message}</p>`;
         });
+    });
+  });
 
-        noteContentInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && e.ctrlKey) { // Ctrl+Enter 保存
-                e.preventDefault();
-                addNote();
-            }
-        });
-
-        // 页面加载时自动加载笔记
-        window.addEventListener('load', loadNotes);
-    </script>
-</body>
-</html>
+  // 新增：关闭MD笔记容器
+  document.getElementById('hide-md-btn').addEventListener('click', () => {
+    document.getElementById('md-content-container').style.display = 'none';
+  });
+</script>
